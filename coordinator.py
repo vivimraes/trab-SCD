@@ -13,33 +13,40 @@ class Coordinator:
         self.lock = threading.Lock()
         self.logs = []
         self.process_count = {}
+        self.shutdown_event = threading.Event()
 
     def start(self):
-        threading.Thread(target=self.handle_connections).start()
-        threading.Thread(target=self.handle_requests).start()
-        threading.Thread(target=self.terminal_interface).start()
+        threading.Thread(target=self.handle_connections, daemon=True).start()
+        threading.Thread(target=self.handle_requests, daemon=True).start()
+        self.terminal_interface()
 
     def handle_connections(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((self.host, self.port))
             s.listen()
             print(f"Coordinator is listening on {self.host}:{self.port}")
-            while True:
-                conn, addr = s.accept()
-                process_id = conn.recv(self.F).decode().strip('|')
-                self.sockets[process_id] = conn
-                self.process_count[process_id] = 0
-                print(f"Process {process_id} connected.")
+            while not self.shutdown_event.is_set():
+                try:
+                    conn, addr = s.accept()
+                    process_id = conn.recv(self.F).decode().strip('|')
+                    with self.lock:
+                        self.sockets[process_id] = conn
+                        self.process_count[process_id] = 0
+                    print(f"Process {process_id} connected.")
+                    self.queue.put(process_id)  # Adiciona o processo à fila
+                    print(f"Added Process {process_id} to the queue.")
+                except Exception as e:
+                    print(f"Error accepting connection: {e}")
 
     def handle_requests(self):
-        while True:
+        while not self.shutdown_event.is_set():
             if not self.queue.empty():
                 process_id = self.queue.get()
-                self.lock.acquire()
-                self.send_grant(process_id)
-                time.sleep(1)  # Simulate critical section duration
-                self.send_release(process_id)
-                self.lock.release()
+                with self.lock:
+                    print(f"Processing request from Process {process_id}.")
+                    self.send_grant(process_id)
+                    time.sleep(1)  # Simulate critical section duration
+                    self.send_release(process_id)
 
     def send_grant(self, process_id):
         message = f"2|{process_id}|{'0'*(self.F-4-len(process_id))}"
@@ -68,15 +75,20 @@ class Coordinator:
             elif command == "3":
                 self.shutdown()
                 break
+            else:
+                print("Unknown command. Please enter '1', '2', or '3'.")
 
     def print_queue(self):
-        print("Current Queue: ", list(self.queue.queue))
+        with self.lock:
+            print("Current Queue: ", list(self.queue.queue))
 
     def print_process_count(self):
-        print("Process Count: ", self.process_count)
+        with self.lock:
+            print("Process Count: ", self.process_count)
 
     def shutdown(self):
         print("Shutting down coordinator.")
+        self.shutdown_event.set()
         for conn in self.sockets.values():
             conn.close()
         exit(0)

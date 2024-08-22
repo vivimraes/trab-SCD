@@ -11,7 +11,7 @@ if __name__ == "__main__":
     threading.Thread(target=coordinator.start).start()
 
     # Iniciar processos
-    process_count = 3
+    process_count = 6
     r = 5
     k = 2
     for i in range(1, process_count + 1):
