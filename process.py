@@ -11,14 +11,19 @@ class Process:
         self.k = k
 
     def start(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.coordinator_host, self.coordinator_port))
-            s.send(f"{self.process_id}|{'0'*(self.F-len(self.process_id)-1)}".encode())
-            for _ in range(self.r):
-                self.send_request(s)
-                self.wait_for_grant(s)
-                self.enter_critical_section()
-                time.sleep(self.k)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.coordinator_host, self.coordinator_port))
+                s.send(f"{self.process_id}|{'0'*(self.F-len(self.process_id)-1)}".encode())
+                for _ in range(self.r):
+                    self.send_request(s)
+                    self.wait_for_grant(s)
+                    self.enter_critical_section(s)
+                    time.sleep(self.k)
+        except socket.error as e:
+            print(f"Exception ocurred: {e}")
+        except Exception as e:
+            print(f"Exception ocurred: {e}")
 
     def send_request(self, s):
         message = f"1|{self.process_id}|{'0'*(self.F-4-len(self.process_id))}"
